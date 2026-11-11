@@ -1,57 +1,42 @@
-/** JMA v1.6.1 Stage B: read-only, conservative Scryfall Oracle analysis. */
+/** JMA Stage C1: read-only, conservative mana-source classification. */
 let catalogPromise;
 const normalize=s=>String(s||'').normalize('NFKC').toLowerCase().trim();
 const COLORS=['W','U','B','R','G'];
 export function loadStatsCatalog(){
-  if(!catalogPromise)catalogPromise=fetch('./cards.json').then(r=>{if(!r.ok)throw Error('Card catalog unavailable (HTTP '+r.status+')');return r.json()}).then(cards=>{
-    const map=new Map();
-    for(const c of cards){if(c.name)map.set(normalize(c.name),c);for(const f of c.card_faces||[])if(f.name&&!map.has(normalize(f.name)))map.set(normalize(f.name),c);}
-    return map;
-  }).catch(err=>{catalogPromise=null;throw err;});
-  return catalogPromise;
+ if(!catalogPromise)catalogPromise=fetch('./cards.json').then(r=>{if(!r.ok)throw Error('Card catalog unavailable: '+r.status);return r.json()}).then(cards=>{
+  const map=new Map();for(const c of cards){if(c.name)map.set(normalize(c.name),c);for(const f of c.card_faces||[])if(f.name&&!map.has(normalize(f.name)))map.set(normalize(f.name),c)}return map;
+ }).catch(e=>{catalogPromise=null;throw e});return catalogPromise;
 }
-function cardType(card){return card.type_line||card.card_faces?.[0]?.type_line||'';}
-function manaCost(card){return card.mana_cost||card.card_faces?.[0]?.mana_cost||'';}
-function colorsOf(card){const c=card.color_identity||[];return c.length?c.filter(x=>COLORS.includes(x)):['C'];}
-function coloredSymbols(cost){const out=[];for(const match of String(cost).matchAll(/\{([^}]+)\}/g)){
-  const token=match[1].toUpperCase();const parts=token.split('/');
-  for(const part of parts)if(COLORS.includes(part))out.push(part);
-}return out;}
-function produced(card){const p=card.produced_mana||[];return [...new Set(p.filter(x=>COLORS.includes(x)||x==='C'))];}
-function isBasicLand(card){return /\bBasic Land\b/i.test(cardType(card));}
-function validCmc(card){const v=card.cmc;return typeof v==='number'&&Number.isFinite(v)&&v>=0;}
-export function analyzeDeck(entries,catalog,options={}){
- const out={total:0,unique:0,lands:0,nonlands:0,unknown:[],curve:[0,0,0,0,0,0,0,0],curveKnown:0,
-  types:{Creature:0,Instant:0,Sorcery:0,Artifact:0,Enchantment:0,Planeswalker:0,Battle:0,Land:0,Other:0},
-  colors:{W:0,U:0,B:0,R:0,G:0,C:0},manaRequirements:{W:0,U:0,B:0,R:0,G:0},
-  manaSources:{W:0,U:0,B:0,R:0,G:0,C:0},manaProducers:0,averageManaValue:null,validation:[]};
- let weighted=0,seen=0;const grouped=new Map();const commanderName=normalize(options.commander);
- const commander=commanderName?catalog.get(commanderName):null;
- const commanderIdentity=commander?new Set((commander.color_identity||[]).filter(x=>COLORS.includes(x))):null;
- const isCommander=String(options.format||'').trim().toLowerCase()==='commander';
- for(const entry of entries){const q=Number(entry.quantity);if(!Number.isInteger(q)||q<=0)continue;
-  out.total+=q;out.unique++;const name=String(entry.name||entry.card_name||'');const card=catalog.get(normalize(name));
-  if(!card){out.unknown.push(name);continue;}
-  const type=cardType(card);const land=/\bLand\b/.test(type);
-  const category=land?'Land':(['Creature','Instant','Sorcery','Artifact','Enchantment','Planeswalker','Battle'].find(t=>type.includes(t))||'Other');
-  out.types[category]+=q;if(land)out.lands+=q;else out.nonlands+=q;
-  for(const c of colorsOf(card))out.colors[c]+=q;
-  for(const c of coloredSymbols(manaCost(card)))out.manaRequirements[c]+=q;
-  const p=produced(card);if(p.length){out.manaProducers+=q;for(const c of p)out.manaSources[c]+=q;}
-  if(!land&&validCmc(card)){out.curve[Math.min(7,Math.floor(card.cmc))]+=q;out.curveKnown+=q;weighted+=card.cmc*q;seen+=q;}
-  const key=normalize(card.oracle_id||card.name||name);const prev=grouped.get(key)||{count:0,card,name};prev.count+=q;grouped.set(key,prev);
-  if(isCommander){
-    if(card.legalities?.commander==='not_legal'||card.legalities?.commander==='banned')out.validation.push({severity:'error',message:`${name} is not legal in Commander according to the catalog.`});
-    if(commanderIdentity&&[...(card.color_identity||[])].some(c=>!commanderIdentity.has(c)))out.validation.push({severity:'error',message:`${name} falls outside the commander's color identity.`});
-  }
+const isType=(s,t)=>new RegExp('\\b'+t+'\\b','i').test(s);
+const manaValue=cost=>{let n=0;for(const m of String(cost||'').matchAll(/\{([^}]+)\}/g)){const x=m[1].toUpperCase();if(/^\d+$/.test(x))n+=+x;else if(['X','Y','Z'].includes(x)){}else if(/^2\//.test(x))n+=2;else if(x==='P'){}else n+=1;}return n};
+function manaInfo(card){
+ const faces=card.card_faces?.length?card.card_faces:[card];
+ const type=card.type_line||faces.map(f=>f.type_line||'').join(' // ');
+ const text=faces.map(f=>f.oracle_text||'').join('\n')||card.oracle_text||'';
+ const land=isType(type,'Land'),artifact=isType(type,'Artifact'),creature=isType(type,'Creature'),enchantment=isType(type,'Enchantment');
+ const produced=Array.isArray(card.produced_mana)?card.produced_mana.filter(x=>COLORS.includes(x)||x==='C'):[];
+ // Scryfall produced_mana is an indication of potential production, not guaranteed access.
+ const hasProduction=produced.length>0 || /add (?:\{[WUBRGC]\}|(?:one|two|three|any|an amount of) mana)/i.test(text);
+ const temporary=!land && /add (?:\{[WUBRGC]\}|(?:one|two|three|any|an amount of) mana)/i.test(text) && !/\{T\}\s*:\s*add/i.test(text) && !/whenever .*add .*mana/i.test(text);
+ const conditional= /only to cast|spend this mana only|if |unless |for each|where X|opponent controls|choose a color|any color in your commander's color identity|any type that a land/i.test(text);
+ let category='other';
+ if(hasProduction){if(land)category='lands';else if(artifact)category='rocks';else if(creature)category='creatures';else if(enchantment)category='enchantments';else category='otherSpells';}
+ // Acceleration is deliberately a candidate count, not a definitive game-rules conclusion.
+ const accelerationCandidate=hasProduction&&!land&&(category==='rocks'||category==='creatures'||category==='enchantments'||temporary);
+ return {hasProduction,produced,category,temporary:temporary&&!land,conditional,accelerationCandidate};
+}
+export function analyzeDeck(cards,catalog){
+ const out={total:0,unique:0,lands:0,nonlands:0,unknown:[],curve:Array(8).fill(0),types:{Creature:0,Instant:0,Sorcery:0,Artifact:0,Enchantment:0,Planeswalker:0,Battle:0,Land:0,Other:0},colors:{W:0,U:0,B:0,R:0,G:0,C:0},averageManaValue:null,
+  manaSources:{total:0,lands:0,rocks:0,creatures:0,enchantments:0,otherSpells:0,temporary:0,conditional:0,accelerationCandidates:0,byColor:{W:0,U:0,B:0,R:0,G:0,C:0},unknownColor:0},manaNotes:[]};
+ let weighted=0,knownNonlands=0;
+ for(const entry of cards){const q=Number(entry.quantity)||0;if(q<=0)continue;out.total+=q;out.unique++;const card=catalog.get(normalize(entry.name));if(!card){out.unknown.push(entry.name);continue;}
+  const face=card.card_faces?.[0]||card;const type=card.type_line||face.type_line||'';const land=isType(type,'Land');const primary=['Creature','Instant','Sorcery','Artifact','Enchantment','Planeswalker','Battle'].find(t=>isType(type,t))||(land?'Land':'Other');out.types[primary]+=q;
+  const info=manaInfo(card);if(info.hasProduction){const m=out.manaSources;m.total+=q;m[info.category]+=q;if(info.temporary)m.temporary+=q;if(info.conditional)m.conditional+=q;if(info.accelerationCandidate)m.accelerationCandidates+=q;if(!info.produced.length)m.unknownColor+=q;else for(const c of new Set(info.produced))m.byColor[c]+=q;}
+  if(land){out.lands+=q;continue;}out.nonlands+=q;
+  const cost=card.mana_cost||face.mana_cost||'';const mv=typeof card.cmc==='number'?card.cmc:(cost?manaValue(cost):null);if(mv!==null){out.curve[Math.min(7,Math.floor(mv))]+=q;weighted+=mv*q;knownNonlands+=q;}
+  const colors=card.colors?.length?card.colors:(face.colors||[]);if(colors.length){for(const c of colors)if(c in out.colors)out.colors[c]+=q;}else out.colors.C+=q;
  }
- out.averageManaValue=seen?weighted/seen:null;
- if(isCommander){
-  if(out.total!==100)out.validation.push({severity:'warning',message:`Commander decks normally require 100 cards including commander; current list has ${out.total}. Check whether the commander is included.`});
-  if(!commanderName)out.validation.push({severity:'warning',message:'No commander specified; color-identity checks are incomplete.'});
-  else if(!commander)out.validation.push({severity:'warning',message:'Commander was not found in the catalog; color-identity checks are incomplete.'});
-  for(const {count,card,name} of grouped.values())if(count>1&&!isBasicLand(card))out.validation.push({severity:'warning',message:`${name} has ${count} copies; verify singleton exceptions (e.g., card-specific rules).`});
-  out.validation.push({severity:'info',message:'Commander eligibility, partner rules, sideboard handling, and all special exceptions are not fully validated.'});
- }
+ out.averageManaValue=knownNonlands?weighted/knownNonlands:null;out.curveKnown=knownNonlands;
+ out.manaNotes=['Potential sources are counted by cards, not activations or mana quantity.','Color production reflects Scryfall produced_mana; flexible and conditional sources may be counted in multiple colors.','Temporary and conditional source counts overlap other categories. Acceleration is a candidate classification, not a rules guarantee.'];
  return out;
 }
