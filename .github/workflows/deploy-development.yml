@@ -30,51 +30,94 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download production card database
-        run: |
-          curl --fail --location --retry 3 \
-            --output cards.json \
-            "https://kings1223-ux.github.io/jaces-mystical-archive/cards.json"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-          curl --fail --location --retry 3 \
-            --output database-version.json \
-            "https://kings1223-ux.github.io/jaces-mystical-archive/database-version.json"
-
-      - name: Validate database
+      - name: Install database dependencies
         run: |
-          python3 - <<'PY'
+          python -m pip install ijson
+
+      - name: Generate expanded Scryfall database
+        run: |
+          python scripts/update_cards.py
+
+      - name: Validate expanded database
+        run: |
+          python - <<'PY'
           import json
           from pathlib import Path
 
-          cards = json.loads(Path("cards.json").read_text())
-          version = json.loads(
-              Path("database-version.json").read_text()
-          )
+          root = Path("public")
+          cards_path = root / "cards.json"
+          version_path = root / "database-version.json"
+
+          if not cards_path.is_file():
+              raise RuntimeError("cards.json was not generated")
+
+          if not version_path.is_file():
+              raise RuntimeError(
+                  "database-version.json was not generated"
+              )
+
+          with version_path.open(encoding="utf-8") as f:
+              version = json.load(f)
+
+          if version.get("schema_version") != 2:
+              raise RuntimeError(
+                  "Expected database schema version 2"
+              )
+
+          with cards_path.open(encoding="utf-8") as f:
+              cards = json.load(f)
 
           if not isinstance(cards, list) or len(cards) < 1000:
+              raise RuntimeError("Invalid card database")
+
+          required = (
+              "name",
+              "type_line",
+              "oracle_text",
+              "mana_cost",
+              "cmc",
+              "color_identity",
+              "legalities",
+              "oracle_id",
+              "id",
+          )
+
+          sample = next(
+              (
+                  c for c in cards
+                  if c.get("name") == "Sol Ring"
+              ),
+              None
+          )
+
+          if sample is None:
+              raise RuntimeError("Sol Ring not found")
+
+          missing = [k for k in required if k not in sample]
+
+          if missing:
               raise RuntimeError(
-                  "Card database is missing or incomplete."
+                  f"Missing required fields: {missing}"
               )
 
-          if not version.get("updated_at"):
-              raise RuntimeError(
-                  "Database version metadata is invalid."
-              )
-
-          print(f"Validated {len(cards)} cards")
-          print("Database version:", version["updated_at"])
+          print("Database validation successful")
+          print("Schema version:", version["schema_version"])
+          print("Total cards:", len(cards))
+          print("Sample card:", sample["name"])
           PY
 
-      - name: Prepare website
-        run: |
-          
       - name: Prepare website
         run: |
           mkdir -p _site
 
           cp index.html _site/
-          cp cards.json _site/
-          cp database-version.json _site/
+          cp public/cards.json _site/
+          cp public/database-version.json _site/
 
           if [ -d src ]; then
             cp -R src _site/
@@ -87,14 +130,11 @@ jobs:
             cp codex-security-test.html _site/
           fi
 
-          echo "Checking Codex v1.6 files..."
-
           test -f _site/src/codex/codexPage.js
           test -f _site/src/codex/deckStats.js
           test -f _site/src/styles/codex-v16.css
 
-          echo "All required Codex files found."
-
+          echo "Development website prepared."
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
