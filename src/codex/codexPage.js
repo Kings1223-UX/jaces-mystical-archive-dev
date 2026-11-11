@@ -1,3 +1,4 @@
+import {analyzeCardRoles,ROLE_LABELS} from './cardRoles.js';
 
 import {loadStatsCatalog,analyzeDeck} from './deckStats.js';
 import {listDecks,loadDeck,saveDeck,deleteDeck,loadDeckVersion,compareDeckVersions,restoreDeckVersion} from './codexService.js';
@@ -126,6 +127,23 @@ export function initializeCodex({navigate,sendToProxy}){
         ));
       }
       const mana=stats.manaSources;
+      const roles=analyzeCardRoles(currentCards,catalog);
+      box.append(e('h3','','Functional card roles (experimental)'));
+      const roleList=e('div','codex-v16-list');
+      for(const [key,label] of Object.entries(ROLE_LABELS)){
+        roleList.append(e('span','codex-v16-chip',`${label}: ${roles.totals[key]}`));
+      }
+      box.append(roleList);
+      const roleDetails=e('details');
+      const roleTitle=e('summary','','Review classified cards and confidence');
+      roleDetails.append(roleTitle);
+      if(!roles.details.length)roleDetails.append(e('p','muted','No matching roles detected.'));
+      for(const item of roles.details){
+        const line=e('p','muted',`${item.quantity} × ${item.name}: ${item.roles.map(r=>`${ROLE_LABELS[r.role]} (${r.confidence})`).join(', ')}`);
+        roleDetails.append(line);
+      }
+      box.append(roleDetails);
+      box.append(e('p','codex-v16-warning',roles.method));
       box.append(e('h3','','Mana source breakdown'));
       const sourceSummary=e('div','codex-v16-summary');
       for(const [label,value] of [
