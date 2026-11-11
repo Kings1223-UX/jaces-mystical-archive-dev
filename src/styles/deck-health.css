@@ -1,0 +1,14 @@
+.jma-health{margin:18px 0;padding:18px;border:1px solid #cbdff2;border-radius:14px;background:#f8fbff;color:#173b61}
+.jma-health h3{margin:0 0 5px}.jma-health h4{margin:0 0 12px}.jma-health h5{margin:12px 0 8px}
+.jma-health-muted{font-size:12px;color:#5b7189;line-height:1.5}
+.jma-health-section{border-top:1px solid #d6e5f4;padding:16px 0}
+.jma-health-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px}
+.jma-health-metric{background:#eaf3fc;border:1px solid #d2e3f4;padding:12px;border-radius:10px}
+.jma-health-metric small,.jma-health-metric strong{display:block}.jma-health-metric strong{font-size:21px;margin-top:4px}
+.jma-health-breakdown{display:flex;flex-wrap:wrap;gap:7px}
+.jma-health-chip{font-size:12px;border:1px solid #cbdff2;background:#eef6ff;padding:6px 9px;border-radius:9px}
+.jma-health-bars{display:flex;align-items:end;gap:7px;height:135px;background:#edf5ff;border-radius:10px;padding:10px}
+.jma-health-col{flex:1;min-width:0;text-align:center;display:flex;flex-direction:column;justify-content:end;height:100%;font-size:11px}
+.jma-health-bar{background:#3776b6;border-radius:4px 4px 0 0;width:100%}
+.jma-health-details{margin-top:12px;font-size:13px}.jma-health-details summary{cursor:pointer;font-weight:600}.jma-health-details li{margin:5px 0;overflow-wrap:anywhere}
+@media(max-width:500px){.jma-health{padding:12px}.jma-health-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}

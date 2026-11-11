@@ -1,4 +1,4 @@
-import {analyzeCardRoles,ROLE_LABELS} from './cardRoles.js';
+import {createDeckHealthDashboard} from './deckHealthDashboard.js';
 
 import {loadStatsCatalog,analyzeDeck} from './deckStats.js';
 import {listDecks,loadDeck,saveDeck,deleteDeck,loadDeckVersion,compareDeckVersions,restoreDeckVersion} from './codexService.js';
@@ -79,99 +79,7 @@ export function initializeCodex({navigate,sendToProxy}){
   }
 
   function statisticsPanel(currentCards){
-    const box=e('section','');
-    box.append(e('h3','','Deck composition & mana curve'));
-    const message=e('p','muted','Analyzing cards from the hosted catalog…');
-    box.append(message);
-
-    loadStatsCatalog().then(catalog=>{
-      if(!box.isConnected)return;
-      const stats=analyzeDeck(currentCards,catalog);
-      box.replaceChildren(e('h3','','Deck composition & mana curve'));
-
-      const summary=e('div','codex-v16-summary');
-      for(const [label,value] of [
-        ['Total cards',stats.total],
-        ['Unique cards',stats.unique],
-        ['Lands',stats.lands],
-        ['Avg. mana value',stats.averageManaValue===null?'—':stats.averageManaValue.toFixed(2)]
-      ]){
-        const item=e('div','codex-v16-stat');
-        item.append(e('strong','',String(value)),e('small','',label));
-        summary.append(item);
-      }
-      box.append(summary);
-
-      const detail=e('div','codex-v16-list');
-      for(const [type,count] of Object.entries(stats.types)){
-        if(count)detail.append(e('span','codex-v16-chip',`${type}: ${count}`));
-      }
-      box.append(detail);
-
-      box.append(e('p','muted',`Mana curve · ${stats.curveKnown} nonland cards with known costs`));
-      const chart=e('div','codex-v16-chart');
-      const max=Math.max(1,...stats.curve);
-      stats.curve.forEach((count,i)=>{
-        const col=e('div','codex-v16-col');
-        col.append(e('div','',String(count)));
-        const bar=e('div','codex-v16-bar');
-        bar.style.height=`${Math.max(2,Math.round(75*count/max))}px`;
-        col.append(bar,e('div','',i===7?'7+':String(i)));
-        chart.append(col);
-      });
-      box.append(chart);
-
-      if(stats.unknown.length){
-        box.append(e('p','codex-v16-warning',
-          `${stats.unknown.length} unmatched card name(s): ${stats.unknown.slice(0,8).join(', ')}. Statistics exclude unmatched cards.`
-        ));
-      }
-      const mana=stats.manaSources;
-      const roles=analyzeCardRoles(currentCards,catalog);
-      box.append(e('h3','','Functional card roles (experimental)'));
-      const roleList=e('div','codex-v16-list');
-      for(const [key,label] of Object.entries(ROLE_LABELS)){
-        roleList.append(e('span','codex-v16-chip',`${label}: ${roles.totals[key]}`));
-      }
-      box.append(roleList);
-      const roleDetails=e('details');
-      const roleTitle=e('summary','','Review classified cards and confidence');
-      roleDetails.append(roleTitle);
-      if(!roles.details.length)roleDetails.append(e('p','muted','No matching roles detected.'));
-      for(const item of roles.details){
-        const line=e('p','muted',`${item.quantity} × ${item.name}: ${item.roles.map(r=>`${ROLE_LABELS[r.role]} (${r.confidence})`).join(', ')}`);
-        roleDetails.append(line);
-      }
-      box.append(roleDetails);
-      box.append(e('p','codex-v16-warning',roles.method));
-      box.append(e('h3','','Mana source breakdown'));
-      const sourceSummary=e('div','codex-v16-summary');
-      for(const [label,value] of [
-        ['Potential sources',mana.total],['Lands producing mana',mana.lands],
-        ['Mana rocks',mana.rocks],['Mana creatures',mana.creatures],
-        ['Mana enchantments',mana.enchantments],['Other mana spells',mana.otherSpells],
-        ['Temporary sources',mana.temporary],['Conditional sources',mana.conditional],
-        ['Acceleration candidates',mana.accelerationCandidates]
-      ]){
-        const item=e('div','codex-v16-stat');
-        item.append(e('strong','',String(value)),e('small','',label));
-        sourceSummary.append(item);
-      }
-      box.append(sourceSummary);
-      box.append(e('h3','','Potential mana colors'));
-      const sourceColors=e('div','codex-v16-list');
-      for(const [color,label] of [['W','White'],['U','Blue'],['B','Black'],['R','Red'],['G','Green'],['C','Colorless']]){
-        sourceColors.append(e('span','codex-v16-chip',`${label}: ${mana.byColor[color]}`));
-      }
-      box.append(sourceColors);
-      if(mana.unknownColor)box.append(e('p','codex-v16-warning',`${mana.unknownColor} potential source(s) lack specific production-color data.`));
-      for(const note of stats.manaNotes)box.append(e('p','muted',note));
-      box.append(e('p','muted','Mana values use Scryfall CMC when available; unusual layouts require review.'));
-
-    }).catch(err=>{
-      message.textContent='Statistics unavailable: '+err.message;
-    });
-    return box;
+    return createDeckHealthDashboard(currentCards);
   }
 
   async function library(){
