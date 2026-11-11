@@ -68,6 +68,7 @@ jobs:
       - name: Prepare website
         run: |
           mkdir -p _site
+
           cp index.html _site/
           cp cards.json _site/
           cp database-version.json _site/
@@ -75,6 +76,14 @@ jobs:
           if [ -d src ]; then
             cp -R src _site/
           fi
+
+          if [ -f codex-security-test.html ]; then
+            cp codex-security-test.html _site/
+          else
+            echo "ERROR: Codex security test file is missing."
+            exit 1
+          fi
+
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
