@@ -27,5 +27,6 @@ export function initializeProxy({norm,getCustom,getActiveCardNames,findActiveCar
  window.addEventListener('resize',()=>requestAnimationFrame(layout.fitPreview));
  for(const mode of ['bw','color'])document.getElementById(mode).onclick=()=>{printMode=mode;layout.setMode(mode);document.getElementById('bw').classList.toggle('active',mode==='bw');document.getElementById('color').classList.toggle('active',mode==='color');layout.render(previewCards)};
  layout.render(previewCards);renderQueue();
- return {refreshSuggestions};
+ function importFromCodex(cards){queue.clear();for(const c of cards)queue.add(c.name,c.quantity);renderQueue();previewJob();}
+ return {refreshSuggestions,importFromCodex};
 }
