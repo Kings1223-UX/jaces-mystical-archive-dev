@@ -21,3 +21,38 @@ export async function loadDeckVersion(deckId, versionId){
  if(ce)throw ce;
  return {deck,version,cards:cards||[]};
 }
+
+/** Compare immutable snapshots. Every lookup is subject to existing RLS. */
+export async function compareDeckVersions(deckId, firstVersionId, secondVersionId){
+ if(!firstVersionId || !secondVersionId || firstVersionId===secondVersionId) throw Error('Choose two different versions.');
+ const [first,second]=await Promise.all([
+  loadDeckVersion(deckId,firstVersionId),loadDeckVersion(deckId,secondVersionId)
+ ]);
+ const identity=c=>`${c.board||'main'}\u0000${(c.card_name||'').normalize('NFKC').toLowerCase()}`;
+ const index=list=>{
+  const map=new Map();
+  for(const c of list){const key=identity(c);const old=map.get(key);if(old)old.quantity+=Number(c.quantity)||0;else map.set(key,{name:c.card_name,board:c.board||'main',quantity:Number(c.quantity)||0});}
+  return map;
+ };
+ const before=index(first.cards),after=index(second.cards);
+ const rows=[];
+ for(const key of new Set([...before.keys(),...after.keys()])){
+  const a=before.get(key),b=after.get(key),from=a?.quantity||0,to=b?.quantity||0;
+  if(from!==to)rows.push({name:(b||a).name,board:(b||a).board,from,to,change:to-from});
+ }
+ rows.sort((a,b)=>a.board.localeCompare(b.board)||a.name.localeCompare(b.name));
+ return {first:first.version,second:second.version,rows};
+}
+
+/** Restores cards by saving a NEW version through the existing atomic RPC. */
+export async function restoreDeckVersion(deckId,versionId){
+ const snapshot=await loadDeckVersion(deckId,versionId);
+ // Fetch the latest metadata immediately before saving, not historical metadata.
+ const {deck}=await loadDeck(deckId);
+ const restoredCards=snapshot.cards.map(c=>({name:c.card_name,quantity:c.quantity,board:c.board||'main',oracle_id:c.oracle_id,scryfall_id:c.scryfall_id}));
+ const result=await saveDeck({
+  id:deckId,name:deck.name,format:deck.format,commander:deck.commander,
+  cards:restoredCards,notes:`Restored card list from version ${snapshot.version.version_number}`
+ });
+ return {result,sourceVersion:snapshot.version.version_number};
+}

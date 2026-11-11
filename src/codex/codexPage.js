@@ -1,4 +1,4 @@
-import {listDecks,loadDeck,saveDeck,deleteDeck,loadDeckVersion,codexClient} from './codexService.js';
+import {listDecks,loadDeck,saveDeck,deleteDeck,loadDeckVersion,compareDeckVersions,restoreDeckVersion,codexClient} from './codexService.js';
 const e=(tag,cls,text)=>{const x=document.createElement(tag);if(cls)x.className=cls;if(text!==undefined)x.textContent=text;return x;};
 export function initializeCodex({navigate,sendToProxy}){
  const root=document.getElementById('other-page');let active=null,cards=[],busy=false;
@@ -28,6 +28,44 @@ export function initializeCodex({navigate,sendToProxy}){
    root.append(e('p','help','Historical cards and quantities are read-only. Deck name, format, and commander are shown from the current deck record because earlier versions did not store separate copies of those fields.'));
   }catch(err){root.replaceChildren(e('p','help',`Unable to load version: ${err.message}`),btn('Back to current deck',()=>openDeck(deckId)));}
  }
+ async function compareVersions(deckId,versions){
+  root.replaceChildren();root.append(e('h2','','Compare deck versions'),e('p','muted','Compare saved card quantities. Changes are calculated from the first version to the second.'));
+  if(versions.length<2){root.append(e('p','muted','Save at least two versions to compare.'),btn('Back to current deck',()=>openDeck(deckId)));return;}
+  const controls=e('div','codex-grid');
+  function versionPicker(label,selected){
+   const wrap=e('label','codex-field');wrap.append(e('span','fieldlabel',label));const select=e('select','textinput');
+   for(const v of versions){const option=e('option','',`Version ${v.version_number}`);option.value=v.id;select.append(option);}
+   select.value=selected;wrap.append(select);return {wrap,select};
+  }
+  const first=versionPicker('From version',versions[versions.length-1].id);
+  const second=versionPicker('To version',versions[0].id);
+  controls.append(first.wrap,second.wrap);root.append(controls);
+  const results=e('div','codex-card-list');
+  const message=e('p','help','');root.append(btn('Compare selected versions',async()=>{
+   if(first.select.value===second.select.value){message.textContent='Choose two different versions.';return;}
+   results.replaceChildren();message.textContent='Loading comparison…';
+   try{
+    const comparison=await compareDeckVersions(deckId,first.select.value,second.select.value);
+    message.textContent=`Version ${comparison.first.version_number} → Version ${comparison.second.version_number}: ${comparison.rows.length} changed card entries.`;
+    if(!comparison.rows.length)results.append(e('p','muted','No card or quantity changes.'));
+    for(const row of comparison.rows){
+     const line=e('div','codex-card-row');const direction=row.change>0?'+':'';
+     line.append(e('span','',`${row.name} (${row.board})`),e('strong','',`${row.from} → ${row.to} (${direction}${row.change})`));results.append(line);
+    }
+   }catch(err){message.textContent='Comparison failed: '+err.message;}
+  },'primary'),results,message);
+  root.append(btn('Back to current deck',()=>openDeck(deckId)));
+ }
+ async function restoreVersion(deckId,version){
+  const ok=confirm(`Restore the cards from Version ${version.version_number}? This will create a NEW version and keep all previous versions. Current deck name, format and commander will be retained.`);
+  if(!ok)return;
+  root.replaceChildren(e('h2','','Restoring historical cards…'));
+  try{
+   const {result,sourceVersion}=await restoreDeckVersion(deckId,version.id);
+   await openDeck(deckId);
+   status(`Restored Version ${sourceVersion} as new Version ${result.version_number}. All previous versions were preserved.`);
+  }catch(err){root.replaceChildren(e('p','help',`Restore failed: ${err.message}`),btn('Back to current deck',()=>openDeck(deckId)));}
+ }
  async function openDeck(id){root.replaceChildren();root.append(e('h2','','Loading deck…'));try{const result=await loadDeck(id);editor(result);}catch(err){root.replaceChildren();root.append(e('p','help',err.message),btn('Back to Codex',library));}}
  function editor(data){active=data?.deck?.id||null;cards=(data?.cards||[]).map(c=>({name:c.card_name,quantity:c.quantity,board:c.board,oracle_id:c.oracle_id,scryfall_id:c.scryfall_id}));root.replaceChildren();root.append(e('h2','',active?'Edit deck':'New deck'));
  const grid=e('div','codex-grid');const name=field('Deck name',data?.deck?.name||'');const format=field('Format',data?.deck?.format||'Commander');const commander=field('Commander (optional)',data?.deck?.commander||'');grid.append(name.wrap,format.wrap,commander.wrap);root.append(grid);
@@ -35,7 +73,7 @@ export function initializeCodex({navigate,sendToProxy}){
  search.oninput=()=>{suggestions.replaceChildren();const q=search.value.trim().toLowerCase();if(q.length<2)return;const results=window.jmaCardNames?.()||[];for(const n of results.filter(x=>x.toLowerCase().includes(q)).slice(0,8)){suggestions.append(btn(n,()=>{const found=cards.find(c=>c.name.toLowerCase()===n.toLowerCase());if(found)found.quantity++;else cards.push({name:n,quantity:1,board:'main'});search.value='';suggestions.replaceChildren();renderCards(cardBox);},'secondary'));}};
  const importLabel=e('label','fieldlabel','Paste a decklist');const textarea=e('textarea');textarea.placeholder='1 Sol Ring\n1 Arcane Signet';textarea.rows=4;root.append(importLabel,textarea,btn('Import cards',()=>{const entries=parse(textarea.value);for(const c of entries){const old=cards.find(x=>x.name.toLowerCase()===c.name.toLowerCase());if(old)old.quantity+=c.quantity;else cards.push(c);}renderCards(cardBox);textarea.value='';status(`Imported ${entries.length} entries.`);}));
  root.append(e('h3','','Cards'));const cardBox=e('div','codex-card-list');root.append(cardBox);renderCards(cardBox);const notes=field('Version notes (optional)');root.append(notes.wrap);const actions=e('div','codex-actions');const save=btn('Save new version',async()=>{if(busy)return;if(!name.input.value.trim()){status('Deck name is required.',true);return;}busy=true;save.disabled=true;status('Saving deck and card snapshot…');try{const result=await saveDeck({id:active,name:name.input.value,format:format.input.value,commander:commander.input.value,cards,notes:notes.input.value});active=result.deck_id;await openDeck(active);status(`Saved version ${result.version_number} successfully.`);}catch(err){status(err.message,true)}finally{busy=false;save.disabled=false;}},'primary');actions.append(save,btn('Send to Proxy',()=>{if(!cards.length){status('Add cards first.',true);return;}sendToProxy(cards);navigate('proxy');}),btn('Back to Codex',library));if(active)actions.append(btn('Delete deck',async()=>{if(!confirm('Delete this deck and all its versions?'))return;try{await deleteDeck(active);library();}catch(err){status(err.message,true)}},'secondary'));root.append(actions);
- if(data?.versions?.length){root.append(e('h3','','Version history'));const history=e('div','codex-history');for(const v of data.versions){const row=e('div','codex-deck');row.append(e('span','muted',`v${v.version_number} · ${new Date(v.created_at).toLocaleString()}${v.notes?' · '+v.notes:''}`),btn('View version',()=>viewVersion(active,v.id)));history.append(row);}root.append(history);}const message=e('p','help','');message.id='codex-status';root.append(message);
+ if(data?.versions?.length){root.append(e('h3','','Version history'));const history=e('div','codex-history');for(const v of data.versions){const row=e('div','codex-deck');row.append(e('span','muted',`v${v.version_number} · ${new Date(v.created_at).toLocaleString()}${v.notes?' · '+v.notes:''}`),btn('View version',()=>viewVersion(active,v.id)),btn('Restore',()=>restoreVersion(active,v)));history.append(row);}root.append(history);if(data.versions.length>1)root.append(btn('Compare versions',()=>compareVersions(active,data.versions),'secondary'));}const message=e('p','help','');message.id='codex-status';root.append(message);
  }
  async function show(){root.classList.remove('hidden');await library();}
  return {show};
