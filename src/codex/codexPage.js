@@ -1,4 +1,3 @@
-
 import {loadStatsCatalog,analyzeDeck} from './deckStats.js';
 import {listDecks,loadDeck,saveDeck,deleteDeck,loadDeckVersion,compareDeckVersions,restoreDeckVersion} from './codexService.js';
 
@@ -77,58 +76,46 @@ export function initializeCodex({navigate,sendToProxy}){
     });
   }
 
-  function statisticsPanel(currentCards){
+  function statisticsPanel(currentCards,deckContext={}){
     const box=e('section','');
-    box.append(e('h3','','Deck composition & mana curve'));
-    const message=e('p','muted','Analyzing cards from the hosted catalog…');
+    const message=e('p','muted','Analyzing expanded Scryfall catalog…');
     box.append(message);
-
     loadStatsCatalog().then(catalog=>{
       if(!box.isConnected)return;
-      const stats=analyzeDeck(currentCards,catalog);
-      box.replaceChildren(e('h3','','Deck composition & mana curve'));
-
+      const stats=analyzeDeck(currentCards,catalog,{format:deckContext.format,commander:deckContext.commander});
+      box.replaceChildren(e('h3','','Advanced deck statistics'));
       const summary=e('div','codex-v16-summary');
       for(const [label,value] of [
-        ['Total cards',stats.total],
-        ['Unique cards',stats.unique],
-        ['Lands',stats.lands],
-        ['Avg. mana value',stats.averageManaValue===null?'—':stats.averageManaValue.toFixed(2)]
+        ['Total cards',stats.total],['Unique cards',stats.unique],['Lands',stats.lands],
+        ['Avg. mana value',stats.averageManaValue===null?'—':stats.averageManaValue.toFixed(2)],
+        ['Mana producers',stats.manaProducers]
       ]){
         const item=e('div','codex-v16-stat');
-        item.append(e('strong','',String(value)),e('small','',label));
-        summary.append(item);
+        item.append(e('strong','',String(value)),e('small','',label));summary.append(item);
       }
       box.append(summary);
-
-      const detail=e('div','codex-v16-list');
-      for(const [type,count] of Object.entries(stats.types)){
-        if(count)detail.append(e('span','codex-v16-chip',`${type}: ${count}`));
-      }
-      box.append(detail);
-
-      box.append(e('p','muted',`Mana curve · ${stats.curveKnown} nonland cards with known costs`));
-      const chart=e('div','codex-v16-chart');
-      const max=Math.max(1,...stats.curve);
+      const chips=(title,values)=>{
+        box.append(e('h4','',title));const row=e('div','codex-v16-list');
+        for(const [key,count] of Object.entries(values))if(count)row.append(e('span','codex-v16-chip',`${key}: ${count}`));
+        box.append(row);
+      };
+      chips('Card types',stats.types);
+      chips('Color identity (cards)',stats.colors);
+      chips('Colored mana symbols required',stats.manaRequirements);
+      chips('Potential mana production (sources)',stats.manaSources);
+      box.append(e('p','muted',`Mana curve · ${stats.curveKnown} nonland cards with known mana values`));
+      const chart=e('div','codex-v16-chart');const max=Math.max(1,...stats.curve);
       stats.curve.forEach((count,i)=>{
-        const col=e('div','codex-v16-col');
-        col.append(e('div','',String(count)));
-        const bar=e('div','codex-v16-bar');
-        bar.style.height=`${Math.max(2,Math.round(75*count/max))}px`;
-        col.append(bar,e('div','',i===7?'7+':String(i)));
-        chart.append(col);
-      });
-      box.append(chart);
-
-      if(stats.unknown.length){
-        box.append(e('p','codex-v16-warning',
-          `${stats.unknown.length} unmatched card name(s): ${stats.unknown.slice(0,8).join(', ')}. Statistics exclude unmatched cards.`
-        ));
-      }
-      box.append(e('p','muted','Mana values are estimates for special costs and multi-face cards.'));
-    }).catch(err=>{
-      message.textContent='Statistics unavailable: '+err.message;
-    });
+        const col=e('div','codex-v16-col');col.append(e('div','',String(count)));
+        const bar=e('div','codex-v16-bar');bar.style.height=`${Math.max(2,Math.round(75*count/max))}px`;
+        col.append(bar,e('div','',i===7?'7+':String(i)));chart.append(col);
+      });box.append(chart);
+      box.append(e('h4','','Commander validation (advisory)'));
+      for(const issue of stats.validation){box.append(e('p',issue.severity==='error'?'codex-v16-warning':'muted',`${issue.severity.toUpperCase()}: ${issue.message}`));}
+      if(!stats.validation.length)box.append(e('p','muted','No issues detected by the available checks; not a full legality certification.'));
+      if(stats.unknown.length)box.append(e('p','codex-v16-warning',`Unmatched cards: ${stats.unknown.slice(0,12).join(', ')}`));
+      box.append(e('p','muted','Mana production includes conditional and any-color sources; these counts are not guaranteed available mana. Hybrid and multi-face casting requirements are approximations.'));
+    }).catch(err=>{if(message.isConnected)message.textContent='Statistics unavailable: '+err.message;});
     return box;
   }
 
@@ -383,11 +370,11 @@ export function initializeCodex({navigate,sendToProxy}){
     let statsPanel;
     editTools.append(btn('Analyze current cards',()=>{
       if(statsPanel)statsPanel.remove();
-      statsPanel=statisticsPanel(cards);
+      statsPanel=statisticsPanel(cards,{format:format.input.value,commander:commander.input.value});
       editTools.after(statsPanel);
     }));
     root.append(editTools);
-    statsPanel=statisticsPanel(cards);
+    statsPanel=statisticsPanel(cards,{format:format.input.value,commander:commander.input.value});
     root.append(statsPanel);
 
     const notes=field('Version notes (optional)');
