@@ -1,7 +1,7 @@
 // Stage A: extracted without visual or typography redesign.
 const typeSymbols=[['Artifact','A'],['Creature','C'],['Enchantment','E'],['Instant','I'],['Sorcery','S'],['Planeswalker','P'],['Battle','B'],['Land','L']];
 function symbolFor(type){for(const [t,s] of typeSymbols)if(type.includes(t))return s;return '?'}
-function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n}
+export function el(tag,cls,txt){const n=document.createElement(tag);if(cls)n.className=cls;if(txt!==undefined)n.textContent=txt;return n}
 function addMana(target,cost){const parts=(cost||'').match(/\{[^}]+\}/g)||[];for(const part of parts){const val=part.slice(1,-1);const token=el('span','mana-token'+(val.length>2?' long-token':''),val);token.title=part;target.append(token)}}
 const INKS={C:'#808080',W:'#ffffff',U:'#0040ff',B:'#B89AD9',R:'#8f0000',G:'#008f00'}; // RGB previews calculated from supplied CMYK (device conversion may vary)
 function inkColors(data){let cs=Array.isArray(data.colors)?data.colors:[];if(!cs.length&&data.card_faces)cs=[...new Set(data.card_faces.flatMap(f=>f.colors||[]))];if(!cs.length){const cost=(data.mana_cost||data.card_faces?.map(f=>f.mana_cost||'').join('')||'');cs=[...new Set((cost.match(/\{[^}]+\}/g)||[]).flatMap(x=>x.match(/[WUBRG]/g)||[]))]}return cs.length?['W','U','B','R','G'].filter(c=>cs.includes(c)):['C']}
