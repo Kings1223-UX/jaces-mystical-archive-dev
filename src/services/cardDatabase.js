@@ -53,3 +53,28 @@ export function searchIndexedCards(map, query, limit=9) {
   return [...names.values()].filter(x=>norm(x).includes(q))
     .sort((a,b)=>Number(norm(b).startsWith(q))-Number(norm(a).startsWith(q))||a.length-b.length||a.localeCompare(b)).slice(0,limit);
 }
+
+// Single source of truth for the currently active card index.
+// The renderer and search UI access cards through this service.
+let activeIndex = new Map();
+export function setActiveCards(data) {
+  if (!Array.isArray(data)) throw Error('Invalid card database format');
+  activeIndex = indexCards(data);
+  return activeIndex.size;
+}
+export function setActiveIndex(index) {
+  if (!(index instanceof Map)) throw Error('Expected a card index Map');
+  activeIndex = index;
+  return activeIndex.size;
+}
+export function clearActiveCards() { activeIndex = new Map(); }
+export function getActiveCardCount() { return activeIndex.size; }
+export function findActiveCard(name) { return activeIndex.get(norm(name)) || null; }
+export function getActiveCardNames() {
+  const names = new Map();
+  for (const [key, card] of activeIndex) {
+    if (card.name) names.set(key, card.card_faces?.find(face => norm(face.name) === key)?.name || card.name);
+  }
+  return [...names.values()];
+}
+export function indexImportedCard(index, card) { addIndexed(index, card); }
