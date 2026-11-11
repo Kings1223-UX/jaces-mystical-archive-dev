@@ -1,0 +1,89 @@
+
+name: Deploy development preview
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    - cron: '37 8 * * *'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: development-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download production card database
+        run: |
+          curl --fail --location --retry 3 \
+            --output cards.json \
+            "https://kings1223-ux.github.io/jaces-mystical-archive/cards.json"
+
+          curl --fail --location --retry 3 \
+            --output database-version.json \
+            "https://kings1223-ux.github.io/jaces-mystical-archive/database-version.json"
+
+      - name: Validate database
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          cards = json.loads(Path("cards.json").read_text())
+          version = json.loads(
+              Path("database-version.json").read_text()
+          )
+
+          if not isinstance(cards, list) or len(cards) < 1000:
+              raise RuntimeError(
+                  "Card database is missing or incomplete."
+              )
+
+          if not version.get("updated_at"):
+              raise RuntimeError(
+                  "Database version metadata is invalid."
+              )
+
+          print(f"Validated {len(cards)} cards")
+          print("Database version:", version["updated_at"])
+          PY
+
+      - name: Prepare website
+        run: |
+          mkdir -p _site
+          cp index.html _site/
+          cp cards.json _site/
+          cp database-version.json _site/
+
+          if [ -d src ]; then
+            cp -R src _site/
+          fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy website
+        id: deployment
+        uses: actions/deploy-pages@v4
