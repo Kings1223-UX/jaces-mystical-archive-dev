@@ -67,6 +67,9 @@ jobs:
 
       - name: Prepare website
         run: |
+          
+      - name: Prepare website
+        run: |
           mkdir -p _site
 
           cp index.html _site/
@@ -75,14 +78,22 @@ jobs:
 
           if [ -d src ]; then
             cp -R src _site/
+          else
+            echo "ERROR: src directory missing"
+            exit 1
           fi
 
           if [ -f codex-security-test.html ]; then
             cp codex-security-test.html _site/
-          else
-            echo "ERROR: Codex security test file is missing."
-            exit 1
           fi
+
+          echo "Checking Codex v1.6 files..."
+
+          test -f _site/src/codex/codexPage.js
+          test -f _site/src/codex/deckStats.js
+          test -f _site/src/styles/codex-v16.css
+
+          echo "All required Codex files found."
 
 
       - name: Configure GitHub Pages
