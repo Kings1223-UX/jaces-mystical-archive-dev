@@ -90,10 +90,12 @@ initializeHostedDb();
 
 import {initializeNavigation} from './src/core/navigation.js';
 import {initializeCodex} from './src/codex/codexPage.js';
+import {initializeAnalytics} from './src/analytics/analyticsPage.js';
 import {initializeLootNotifications} from './src/components/lootNotifications.js';
 import {initializeSettingsPanel} from './src/components/settingsPanel.js';
 const codex=initializeCodex({navigate:(page)=>navigation.navigate(page),sendToProxy:(cards)=>proxyControllerInstance.importFromCodex(cards)});
-const navigation=initializeNavigation(()=>codex.show());
+const analytics=initializeAnalytics();
+const navigation=initializeNavigation(()=>codex.show(),()=>analytics.show());
 window.jmaCardNames=()=>getActiveCardNames();
 initializeLootNotifications();
 initializeSettingsPanel();
