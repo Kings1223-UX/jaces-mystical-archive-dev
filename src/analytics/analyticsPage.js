@@ -7,6 +7,79 @@ export function initializeAnalytics(){
  const field=(title,type='text')=>{const label=el('label','analytics-field');label.append(el('span','fieldlabel',title));const input=el('input','textinput');input.type=type;label.append(input);return {label,input};};
  const selectField=title=>{const label=el('label','analytics-field');label.append(el('span','fieldlabel',title));const input=el('select','textinput');label.append(input);return {label,input};};
  const option=(value,text)=>{const o=el('option','',text);o.value=value;return o;};
+ 
+  function viewReport(report) {
+    const savedReport = report;
+    const token = ++generation;
+
+    root.replaceChildren();
+
+    const heading = el('h2', '', 'Game Report');
+    const subtitle = el(
+      'p',
+      'muted',
+      `Recorded ${new Date(savedReport.played_at).toLocaleDateString()}`
+    );
+
+    const details = el('section', 'analytics-form');
+    details.append(el('h3', '', 'Game Details'));
+
+    const grid = el('div', 'analytics-fields');
+
+    const fields = [
+      ['Result', savedReport.result],
+      ['Game format', savedReport.game_format],
+      ['Players', savedReport.player_count],
+      ['Turns', savedReport.turn_count],
+      ['Play order', savedReport.play_order],
+      ['Mulligans', savedReport.mulligans],
+      ['Opponents', savedReport.opponents],
+      ['Deck version ID', savedReport.deck_version_id]
+    ];
+
+    for (const [label, value] of fields) {
+      const item = el('div', 'analytics-field');
+
+      item.append(
+        el('span', 'fieldlabel', label),
+        el('p', '', value === null || value === undefined || value === ''
+          ? 'Not recorded'
+          : String(value))
+      );
+
+      grid.append(item);
+    }
+
+    details.append(grid);
+
+    details.append(el('h3', '', 'Problems Encountered'));
+
+    const issues = el('div', 'analytics-issues');
+
+    if (Array.isArray(savedReport.problems) &&
+        savedReport.problems.length) {
+      for (const problem of savedReport.problems) {
+        const label = problems.find(p => p[0] === problem)?.[1]
+          || problem;
+
+        issues.append(el('p', '', label));
+      }
+    } else {
+      issues.append(el('p', 'muted', 'No problems recorded.'));
+    }
+
+    details.append(issues);
+
+    details.append(el('h3', '', 'Game Notes'));
+    details.append(
+      el('p', '', savedReport.notes || 'No notes recorded.')
+    );
+
+    root.append(heading, subtitle, details);
+
+    const back = button('Back to Reports', () => show(), 'primary');
+    root.append(back);
+  }
  async function show(){const token=++generation;root.classList.remove('hidden');root.replaceChildren(el('h2','','Analytics'),el('p','muted','Log games against an exact saved Codex deck version.'));const msg=el('p','help','Loading account data…');msg.setAttribute('role','status');const area=el('div','analytics-layout');root.append(area,msg);
  try{const [decks,reports]=await Promise.all([getDeckOptions(),getReports()]);if(token!==generation)return;area.replaceChildren();
     const versionsById=new Map();
