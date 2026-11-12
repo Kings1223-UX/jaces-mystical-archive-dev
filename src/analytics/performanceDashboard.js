@@ -1,4 +1,4 @@
-import {summarizePerformance,groupPerformance,filterPerformanceReports} from './performanceStats.js';
+import {summarizePerformance,groupPerformance,filterPerformanceReports,performanceDataQuality} from './performanceStats.js';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const pct=n=>n===null?'—':`${n.toFixed(1)}%`;
 const avg=n=>n===null?'—':n.toFixed(2);
@@ -16,7 +16,7 @@ export function renderPerformanceDashboard(root,reports,labels=new Map()){
  const body=el('div','analytics-dash-body');root.append(body);
  function draw(){
   const filtered=filterPerformanceReports(reports,{deckVersionId:version.value||undefined,format:format.value||undefined,playerCount:players.value===''?undefined:Number(players.value)});
-  const st=summarizePerformance(filtered);body.replaceChildren();
+  const st=performanceDataQuality(filtered);body.replaceChildren();
   const grid=el('div','analytics-dash-metrics');
   for(const [label,value,detail] of [['Games',st.games,`${st.excludedReports} invalid outcomes excluded`],['Wins / Losses / Draws',`${st.wins} / ${st.losses} / ${st.draws}`,'Recorded outcomes'],['Win rate',pct(st.winRate),`${st.games} games, draws included`],['Decisive win rate',pct(st.decisiveWinRate),`${st.wins+st.losses} decisive games`],['Average turns',avg(st.averageTurns),`${st.turnsSample} games with turn data`],['Average mulligans',avg(st.averageMulligans),`${st.mulligansSample} games with mulligan data`]]){const card=el('div','analytics-dash-metric');card.append(el('small','',label),el('strong','',String(value)),el('small','',detail));grid.append(card);}
   body.append(grid,el('h3','','Reported gameplay problems'));
@@ -25,7 +25,7 @@ export function renderPerformanceDashboard(root,reports,labels=new Map()){
   body.append(el('h3','','Performance by deck version'));
   const groups=groupPerformance(filtered,'deck_version_id');
   if(!groups.length)body.append(el('p','muted','No reports available.'));
-  for(const g of groups){const row=el('div','analytics-dash-version');row.append(el('span','',labels.get(g.key)||g.key),el('span','',`${g.games} games · ${pct(g.winRate)} wins`));body.append(row);}
+  for(const g of groups){const row=el('div','analytics-dash-version');row.append(el('span','',labels.get(g.key)||g.key),el('span','',`${g.games} games · ${g.wins} wins · ${pct(g.winRate)} win rate`));body.append(row);}
   body.append(el('p','muted','Statistics are descriptive. Small samples, differing player counts, and missing values limit comparisons.'));
  }
  version.onchange=draw;format.onchange=draw;players.onchange=draw;draw();

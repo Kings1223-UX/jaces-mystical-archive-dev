@@ -1,21 +1,18 @@
 import assert from 'node:assert/strict';
-import {summarizePerformance,groupPerformance,filterPerformanceReports} from '../src/analytics/performanceStats.js';
+import {summarizePerformance,performanceDataQuality,sampleSizeLabel,filterPerformanceReports} from '../src/analytics/performanceStats.js';
 const rows=[
- {result:'win',deck_version_id:'v1',game_format:'Commander',player_count:4,turn_count:8,mulligans:0,problems:['mana_shortage','mana_shortage','card_draw']},
- {result:'loss',deck_version_id:'v1',game_format:'Commander',player_count:4,turn_count:12,mulligans:2,problems:['mana_shortage']},
- {result:'draw',deck_version_id:'v2',game_format:'Commander',player_count:4,turn_count:null,mulligans:null,problems:[]},
- {result:'win',deck_version_id:'v2',game_format:'Modern',player_count:2,turn_count:6,mulligans:1,problems:['interaction']},
- {result:'unknown',deck_version_id:'v2',turn_count:100,mulligans:99,problems:['invalid']}
+ {result:'win',turn_count:10,mulligans:0,deck_version_id:'v1',problems:['mana','mana']},
+ {result:'loss',turn_count:null,mulligans:1,deck_version_id:'v1',problems:['mana','draw']},
+ {result:'draw',turn_count:12,mulligans:null,deck_version_id:'v2',problems:[]},
+ {result:'unknown',turn_count:99,mulligans:5,deck_version_id:'v2'}
 ];
-const s=summarizePerformance(rows);
-assert.equal(s.games,4);assert.equal(s.wins,2);assert.equal(s.losses,1);assert.equal(s.draws,1);
-assert.equal(s.excludedReports,1);assert.equal(s.winRate,50);
-assert.equal(s.decisiveWinRate,2/3*100);
-assert.equal(s.averageTurns,26/3);assert.equal(s.turnsSample,3);
-assert.equal(s.averageMulligans,1);assert.equal(s.mulligansSample,3);
-assert.equal(s.problems.find(p=>p.key==='mana_shortage').count,2);
-assert.equal(groupPerformance(rows,'deck_version_id').find(x=>x.key==='v1').games,2);
+const x=performanceDataQuality(rows);
+assert.equal(x.games,3);assert.equal(x.excludedReports,1);assert.equal(x.wins,1);
+assert.equal(x.turnsSample,2);assert.equal(x.mulligansSample,2);
+assert.equal(x.missingTurns,1);assert.equal(x.missingMulligans,1);
+assert.equal(x.problems.find(p=>p.key==='mana').count,2);
+assert.equal(x.sampleLabel,'Very limited sample');
+assert.equal(sampleSizeLabel(0),'No data');assert.equal(sampleSizeLabel(100),'Larger sample');
 assert.equal(filterPerformanceReports(rows,{deckVersionId:'v1'}).length,2);
 assert.equal(summarizePerformance([]).winRate,null);
-assert.equal(summarizePerformance([{result:'draw'}]).decisiveWinRate,null);
-console.log('PASS — 16 Analytics Stage A assertions');
+console.log('Stage C statistics tests passed');

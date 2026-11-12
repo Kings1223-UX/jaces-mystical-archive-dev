@@ -49,3 +49,29 @@ export function filterPerformanceReports(reports = [], {deckVersionId,format,pla
     (!format||r.game_format===format) &&
     (playerCount===undefined||playerCount===null||Number(r.player_count)===Number(playerCount)));
 }
+
+/** Descriptive sample labels, not statistical confidence claims. */
+export function sampleSizeLabel(games) {
+  if (!games) return 'No data';
+  if (games < 10) return 'Very limited sample';
+  if (games < 30) return 'Limited sample';
+  if (games < 100) return 'Growing sample';
+  return 'Larger sample';
+}
+
+/** Coverage counts are based on reports with valid recorded outcomes. */
+export function performanceDataQuality(reports = []) {
+  const summary = summarizePerformance(reports);
+  const coverage = (count) => summary.games ? count / summary.games * 100 : null;
+  return {
+    ...summary,
+    totalReports: reports.length,
+    turnCoverage: coverage(summary.turnsSample),
+    mulliganCoverage: coverage(summary.mulligansSample),
+    playOrderCoverage: coverage(summary.playOrderSample),
+    missingTurns: summary.games - summary.turnsSample,
+    missingMulligans: summary.games - summary.mulligansSample,
+    sampleLabel: sampleSizeLabel(summary.games),
+    unlinkedVersions: reports.filter(r => r && ['win','loss','draw'].includes(r.result) && !r.deck_version_id).length
+  };
+}
