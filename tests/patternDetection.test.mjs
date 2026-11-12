@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {detectGameplayPatterns, compareVersionPatterns, compareProblemAcrossVersions} from '../src/analytics/patternDetection.js';
+const r = (result, version, problems = []) => ({result, deck_version_id: version, problems});
+const rows = [r('win','v1',['mana_shortage','mana_shortage']),r('loss','v1',['mana_shortage']),r('draw','v1',[]),r('loss','v2',['mana_shortage','card_draw']),r('win','v2',[]),r('unknown','v2',['mana_shortage'])];
+const x = detectGameplayPatterns(rows,{minOccurrences:2,minFrequency:20});
+assert.equal(x.games,5); assert.equal(x.excludedReports,1); assert.equal(x.wins,2); assert.equal(x.draws,1);
+const mana = x.patterns.find(p=>p.key==='mana_shortage');
+assert.equal(mana.occurrences,3); assert.equal(mana.frequency,60); assert.equal(mana.withIssue.games,3);
+assert.equal(mana.withoutIssue.games,2); assert.equal(mana.recurring,true);
+assert.equal(detectGameplayPatterns([]).games,0);
+assert.equal(detectGameplayPatterns([r('draw','v1')]).winRate,0);
+assert.equal(compareVersionPatterns(rows).length,2);
+const comparison=compareProblemAcrossVersions(rows,'v1','v2','mana_shortage');
+assert.equal(comparison.before.games,3); assert.equal(comparison.after.games,2);
+assert.ok(Math.abs(comparison.percentagePointChange-(50-200/3))<1e-9);
+assert.throws(()=>detectGameplayPatterns('bad'),TypeError);
+assert.throws(()=>detectGameplayPatterns([],{minOccurrences:0}),RangeError);
+console.log('PASS — 12 pattern detection assertions');
