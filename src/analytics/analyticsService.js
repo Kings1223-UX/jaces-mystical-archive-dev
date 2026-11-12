@@ -44,3 +44,55 @@ export async function getAllPerformanceReports(){
  }
  throw Error('Report count exceeds dashboard safety limit. No partial statistics displayed.');
 }
+
+export async function getAllReports() {
+  const { client, user } = await session();
+
+  const pageSize = 500;
+  const allReports = [];
+  const seenIds = new Set();
+
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await client
+      .from('game_reports')
+      .select(
+        'id,deck_version_id,result,game_format,' +
+        'player_count,turn_count,play_order,mulligans,' +
+        'problems,opponents,notes,played_at'
+      )
+      .eq('user_id', user.id)
+      .order('played_at', { ascending: false })
+      .order('id', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      throw new Error(
+        'Unable to retrieve all game reports: ' +
+        error.message
+      );
+    }
+
+    const batch = data || [];
+
+    for (const report of batch) {
+      if (seenIds.has(report.id)) {
+        throw new Error(
+          'Duplicate report encountered during pagination.'
+        );
+      }
+
+      seenIds.add(report.id);
+      allReports.push(report);
+    }
+
+    if (batch.length < pageSize) {
+      break;
+    }
+
+    offset += pageSize;
+  }
+
+  return allReports;
+}
