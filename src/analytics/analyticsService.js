@@ -31,3 +31,16 @@ export async function getReportDeckLabels(reports){
   for(const v of versions||[])if(byDeck.has(v.deck_id))labels.set(v.id,`${byDeck.get(v.deck_id)} — Version ${v.version_number}`);
   return labels;
 }
+
+// Fetch every report in bounded pages. Fail rather than show partial lifetime totals.
+export async function getAllPerformanceReports(){
+ const {client,user}=await session();const pageSize=500;const all=[];
+ for(let start=0;start<1000000;start+=pageSize){
+  const {data,error}=await client.from('game_reports')
+   .select('id,deck_version_id,result,game_format,player_count,turn_count,play_order,mulligans,problems,played_at')
+   .eq('user_id',user.id).order('played_at',{ascending:false}).order('id',{ascending:false})
+   .range(start,start+pageSize-1);
+  if(error)throw error;all.push(...(data||[]));if(!data||data.length<pageSize)return all;
+ }
+ throw Error('Report count exceeds dashboard safety limit. No partial statistics displayed.');
+}

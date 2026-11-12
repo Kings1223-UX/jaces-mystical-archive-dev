@@ -1,3 +1,5 @@
+import {getAllPerformanceReports} from './analyticsService.js';
+import {renderPerformanceDashboard} from './performanceDashboard.js';
 import {getDeckOptions,getVersionOptions,getReports,createReport,updateReport,removeReport,getReportDeckLabels} from './analyticsService.js';
 const el=(tag,cls,text)=>{const n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;};
 const problems=[['mana_shortage','Mana shortage'],['mana_flood','Mana flood'],['card_draw','Insufficient card draw'],['interaction','Insufficient interaction'],['slow_start','Slow early game'],['closing','Difficulty closing the game']];
@@ -22,8 +24,19 @@ export function initializeAnalytics(){
   const actions=el('div','codex-actions');actions.append(button('Edit Report',()=>reportForm(report,labels),'primary'),button('Back to Reports',show));
   root.append(box,actions);
  }
+ async function showDashboard(){
+  const token=++generation;heading('Performance Analytics','Statistics from your saved game reports.');
+  const holder=el('section','analytics-dashboard');const msg=el('p','help','Loading all reports…');
+  root.append(button('Back to Reports',show),msg,holder);
+  try{const reports=await getAllPerformanceReports();if(token!==generation)return;
+   const labels=await getReportDeckLabels(reports);if(token!==generation)return;
+   msg.textContent=`${reports.length} report(s) retrieved for analysis.`;
+   renderPerformanceDashboard(holder,reports,labels);
+  }catch(err){if(token===generation)msg.textContent='Dashboard unavailable: '+err.message;}
+ }
  async function reportForm(existing=null,labels=new Map()){
   const token=++generation;heading(existing?'Edit Game Report':'Analytics',existing?'Update this report without creating a duplicate.':'Log games against an exact saved Codex deck version.');
+  if(!existing)root.append(button('View Performance Dashboard',showDashboard,'primary'));
   const msg=el('p','help','Loading account data…');msg.setAttribute('role','status');const area=el('div','analytics-layout');root.append(area,msg);
   try{
    const [decks,reports]=await Promise.all([getDeckOptions(),existing?Promise.resolve([]):getReports()]);if(token!==generation)return;
